@@ -1,0 +1,65 @@
+= logback-config
+
+Error log context with logback with cleanup
+
+== Log context limitations
+In another article I created a http://logback.qos.ch/[Logback] appender that collect log events and only writes those events to a log file
+when an error occurs. I did a fairly simple implementation that collects events in a ThreadLocal variable. The potential problem is that
+the list in the ThreadLocal can grow if it is never properly cleaned up.
+
+Another issue is that in modern Java, you can easily use multiple threads with collections and parallelStream. My solution will
+collect a context for each stream because each stream runs in its own Thread and create a separate ThreadLocal.
+
+This may lead, over time, to memory leaks.
+
+== Size limit and automatic cleanup.
+To address these issues, I added a check in the code to make sure that the context does not grow uncontrollably. The code simply checks
+the size of the event list and removes events that are older than a set maximum age.
+
+[source,kotlin]
+----
+  if (events.size > maxContextSize) {
+      val minTimestamp = System.currentTimeMillis() - maxEventAge;
+      events = events.stream()
+              .filter {eventItem ->
+                  if (eventItem is ILoggingEvent) {
+                      eventItem.getTimeStamp() > minTimestamp
+                  } else {
+                      true
+                  }
+              }
+              .collect(Collectors.toList())
+  }
+  events.add(event)
+----
+
+You may notice that this is not Java code, but Kotlin. I created a new implementation in Kotlin to get more experience with Kotlin.
+I like the language - it is similar to Java and at the same time different in many ways.
+
+The above solution removes events that are older than a certain number of milliseconds. At first I thought this was a nice solution - you
+probably do not need events that happened 30 seconds ago, for example. On second thought, it could be that the application logs many events
+in a short time and in that case, no events will be removed at all and it will go through the loop every time - bad for performance.
+
+A safer and simpler solution is to cut the list in half and effectively remove half of the events in the list.
+
+[source,kotlin]
+----
+  events = events.subList(events.size/2, events.size)
+----
+
+In the logback configuration, you can specify which appender
+to write the error log context to with errorLogger and errorAppender elements.
+
+[source,xml]
+----
+  <appender name="contextAppender" class="logback.LogContextAppender">
+    <errorLogger>errorLogger</errorLogger>
+    <errorAppender>errorAppender</errorAppender>
+    <maxContextSize>40</maxContextSize>
+  </appender>
+----
+
+You will get a slight performance hit every time the limit is reached - I guess that is the price to pay for convenience, just like the
+JVM garbage collection.
+
+You can look at the code on GitHub: https://github.com/koert/logback-context-kotlin

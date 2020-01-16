@@ -14,8 +14,10 @@ fun main() {
     log.debug("debug 1");
     log.info("info 1");
     log.debug(MarkerFactory.getMarker("resetSession"), "reset log context session");
-    log.debug("debug 2");
-    log.info("info 2");
+    log.debug("debug 2a");
+    log.debug("debug 2b");
+    log.info("info 2a");
+    log.info("info 2b");
     log.error("error 2");
 }
 

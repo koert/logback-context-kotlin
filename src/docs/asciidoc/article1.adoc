@@ -1,0 +1,146 @@
+= logback-config
+
+Error log context with logback
+
+== Detailed logging
+When you are developing software, you often come across unexpected situations that your software doesn't handle correctly.
+In order to figure out what caused the problem, you need a detailed log of what happened and what the input data was, so that
+you can reproduce the situation in your development or test environment.
+
+Sometimes the end users will produce situations and errors that we never thought of.
+In those circumstances it is very helpful to examine the detailed logs.
+Because of this, we let the software log detailed debugging information, even on the production systems.
+The downside is that this will produce large log files, which may fill up file systems, and there is a performance penalty
+for writing all that data.
+
+== Only detailed logging with error
+It would be much more helpful to log all the details only when an error occurred. I came across this idea to log all the detailed
+debugging logs in memory and when an error occurs write this to a log file. In the logback logging library you can define your own
+log appender that can keep the log events in memory.
+
+In a web service or web application request, this will be the process:
+- start and clear a list of log events in a ThreadLocal variable
+- for each append to the log, append the event to the list in ThreadLocal
+- when an error occurs, read the stored list of log events and append them to another log appender that will write them to a log file
+- at the end of the web application request or service, clear the list of log events
+
+== Log debugging context with error
+The LogContextAppender records all log events in a List in ThreadLocal. When an error events comes in, the appender will send all
+recorded events to a separate incident appender and will clear the list.
+
+[source,java]
+----
+  protected void append(E event) {
+    events.get().add(event);
+    if (event instanceof ILoggingEvent) {
+      ILoggingEvent loggingEvent = (ILoggingEvent) event;
+      Marker marker = loggingEvent.getMarker();
+      if (marker != null && marker.contains("resetSession")) {
+        this.clearLog();
+        events.get().add(event);
+      }
+      if (loggingEvent.getLevel().isGreaterOrEqual(Level.ERROR)) {
+        this.writeLogToIncidentLogger();
+        this.clearLog();
+      }
+    }
+  }
+----
+
+The application will need the reset the collected log events in the LogContextAppender to minimize the memory usage and
+unnecessary clutter of your error log context.
+You do that by logging with a marker:
+
+[source,java]
+----
+log.debug(MarkerFactory.getMarker("resetSession"), "reset log context session");
+----
+
+In a typical application, you clear the log session at the start and end of a web application or service request.
+Usually you do this in a javax.servlet.Filter.
+
+[source,java]
+----
+public class LogContextFilter implements Filter {
+
+  private static final Logger log = LoggerFactory.getLogger(LogContextFilter.class);
+
+  @Override
+  public void init(FilterConfig filterConfig) throws ServletException {
+  }
+
+  @Override
+  public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+      throws IOException, ServletException {
+    log.debug(MarkerFactory.getMarker("resetSession"), "start of request");
+
+    try {
+      chain.doFilter(request, response);
+    } finally {
+      log.debug(MarkerFactory.getMarker("resetSession"), "end of request");
+    }
+  }
+
+  @Override
+  public void destroy() {
+  }
+}
+----
+
+In the logback configuration, you can specify which appender
+to write the error log context to with errorLogger and errorAppender elements.
+
+[source,xml]
+----
+  <appender name="contextAppender" class="logback.LogContextAppender">
+    <errorLogger>errorLogger</errorLogger>
+    <errorAppender>errorAppender</errorAppender>
+  </appender>
+----
+
+
+
+== Example configuration
+This configuration will log everything to standard output:
+
+[source,xml]
+----
+<configuration>
+  <statusListener class="ch.qos.logback.core.status.OnConsoleStatusListener" />
+
+  <appender name="stdout" class="ch.qos.logback.core.ConsoleAppender">
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>INFO</level>
+    </filter>
+    <encoder>
+      <pattern>%d{ISO8601}|%level|%logger{36}|%line|%msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="errorAppender" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{ISO8601}|%level|%logger{36}|%line|%msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="contextAppender" class="logback.LogContextAppender">
+    <errorLogger>errorLogger</errorLogger>
+    <errorAppender>errorAppender</errorAppender>
+  </appender>
+
+  <logger name="errorLogger">
+    <appender-ref ref="errorAppender"/>
+  </logger>
+
+  <root level="DEBUG">
+    <appender-ref ref="stdout"  />
+    <appender-ref ref="contextAppender"  />
+  </root>
+</configuration>
+----
+
+Normally, this will log info, warning and error log events to the "stdout" appender. When an error occurs, the contextAppender will
+log everything into the errorLogger/errorAppend.
+
+This approach will can give you a detailed log of what happened just before the error and will also reduce the amount of logging that
+your application will produce.

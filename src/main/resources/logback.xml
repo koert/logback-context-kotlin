@@ -19,7 +19,7 @@
   <appender name="contextAppender" class="logback.LogContextAppender">
     <errorLogger>errorLogger</errorLogger>
     <errorAppender>errorAppender</errorAppender>
-    <maxContextSize>1</maxContextSize>
+    <maxContextSize>2</maxContextSize>
   </appender>
 
   <logger name="errorLogger">

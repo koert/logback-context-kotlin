@@ -13,16 +13,7 @@ class LogContext<E>(val maxContextSize: Int, val maxEventAge: Int) {
 
     fun add(event: E) {
         if (events.size > maxContextSize) {
-            val minTimestamp = System.currentTimeMillis() - maxEventAge;
-            events = events.stream()
-                    .filter {eventItem ->
-                        if (eventItem is ILoggingEvent) {
-                            eventItem.getTimeStamp() > minTimestamp
-                        } else {
-                            true
-                        }
-                    }
-                    .collect(Collectors.toList())
+            garbageCollect2()
         }
         events.add(event)
     }
@@ -39,6 +30,31 @@ class LogContext<E>(val maxContextSize: Int, val maxEventAge: Int) {
             if (event is ILoggingEvent) {
                 appender.doAppend(event as ILoggingEvent)
             }
+        }
+    }
+
+    /**
+     * Garbage collection base on age.
+     */
+    private fun garbageCollect1() {
+        val minTimestamp = System.currentTimeMillis() - maxEventAge;
+        events = events.stream()
+                .filter {eventItem ->
+                    if (eventItem is ILoggingEvent) {
+                        eventItem.getTimeStamp() > minTimestamp
+                    } else {
+                        true
+                    }
+                }
+                .collect(Collectors.toList())
+    }
+
+    /**
+     * Garbage collection base on cutting the list in half.
+     */
+    private fun garbageCollect2() {
+        if (events.size > 0) {
+            events = events.subList(events.size/2, events.size)
         }
     }
 }
