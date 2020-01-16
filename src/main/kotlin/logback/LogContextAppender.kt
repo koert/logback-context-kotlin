@@ -15,6 +15,9 @@ class LogContextAppender<E> : AppenderBase<E>() {
     private var logContextThreadLocal: ThreadLocal<LogContext<E>> = ThreadLocal()
     private var errorLogger = "incidentLogger"
     private var errorAppender = "incidentAppender"
+    var maxContextSize: Int = 50; // maximum number of events in log context
+    var maxEventAge: Int = 30 * 1000; // cut off age (in milliseconds) of events when maxContextSize is reached
+
     /**
      * @param errorLogger Name of logger where events will be logged, if ERROR event is received.
      */
@@ -66,7 +69,7 @@ class LogContextAppender<E> : AppenderBase<E>() {
 
     private fun getLogContext(): LogContext<E> {
         if (logContextThreadLocal.get() == null) {
-            logContextThreadLocal.set(LogContext<E>())
+            logContextThreadLocal.set(LogContext<E>(maxContextSize, maxEventAge))
         }
         return logContextThreadLocal.get()
     }

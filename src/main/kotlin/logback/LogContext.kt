@@ -2,15 +2,28 @@ package logback
 
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.Appender
+import java.util.stream.Collectors
 
 /**
  *
  * @author Koert Zeilstra
  */
-class LogContext<E> {
-    val events = ArrayList<E>()
+class LogContext<E>(val maxContextSize: Int, val maxEventAge: Int) {
+    var events: MutableList<E> = ArrayList<E>()
 
     fun add(event: E) {
+        if (events.size > maxContextSize) {
+            val minTimestamp = System.currentTimeMillis() - maxEventAge;
+            events = events.stream()
+                    .filter {eventItem ->
+                        if (eventItem is ILoggingEvent) {
+                            eventItem.getTimeStamp() > minTimestamp
+                        } else {
+                            true
+                        }
+                    }
+                    .collect(Collectors.toList())
+        }
         events.add(event)
     }
 
