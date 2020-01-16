@@ -5,7 +5,7 @@ import ch.qos.logback.core.Appender
 import java.util.stream.Collectors
 
 /**
- *
+ * Holds the log event context for ThreadLocal.
  * @author Koert Zeilstra
  */
 class LogContext<E>(val maxContextSize: Int, val maxEventAge: Int) {
